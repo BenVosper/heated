@@ -1,5 +1,7 @@
 #!/usr/bin/env python3
 
+import atexit
+
 from logging import getLogger, INFO, StreamHandler
 from time import sleep
 
@@ -31,6 +33,7 @@ class Heater:
     heater_power = 0
 
     def __init__(self):
+        LOGGER.info("Heater starting...")
         self.ipcon = IPConnection()
         while True:
             try:
@@ -174,18 +177,20 @@ class Heater:
                     LOGGER.error("Enumerate Error: " + str(error.description))
                     sleep(1)
 
+    def close(self):
+        if self.lcd:
+            self.lcd.clear_display()
+            self.lcd.remove_all_gui()
+        if self.relay:
+            self.relay.set_state(False)
+        if self.ipcon is not None:
+            self.ipcon.disconnect()
+        LOGGER.info("Heater shut down")
+
 
 if __name__ == "__main__":
-    LOGGER.info("Heater starting...")
-
     heater = Heater()
+    atexit.register(heater.close)
 
-    input("Press key to exit\n")
-
-    heater.lcd.clear_display()
-    heater.lcd.remove_all_gui()
-
-    if heater.ipcon is not None:
-        heater.ipcon.disconnect()
-
-    LOGGER.info("Heater shut down")
+    while True:
+        sleep(600)

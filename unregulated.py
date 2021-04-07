@@ -1,6 +1,7 @@
 #!/usr/bin/env python3
 
 import atexit
+import socket
 
 from logging import getLogger, INFO, StreamHandler
 from time import sleep
@@ -41,6 +42,9 @@ class Heater:
                 break
             except TFConnectionError as error:
                 LOGGER.error("Connection Error: " + str(error.description))
+                sleep(1)
+            except socket.error as error:
+                LOGGER.error("Socket Error: " + str(error))
                 sleep(1)
 
         self.ipcon.register_callback(IPConnection.CALLBACK_ENUMERATE, self.cb_enumerate)

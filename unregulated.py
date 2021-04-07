@@ -3,6 +3,7 @@
 import atexit
 import socket
 
+from collections import deque
 from logging import getLogger, INFO, StreamHandler
 from time import sleep
 
@@ -23,6 +24,35 @@ THERMOCOUPLE_READ_PERIOD = 1000
 GUI_READ_PERIOD = 100
 PWM_PERIOD = 1000
 
+# fmt: off
+CONTROL_ICON = [
+    0,0,0,0,0,0,0,1,0,0,0,1,0,0,0,1,0,0,0,1,0,0,0,0,0,0,0,0,
+    0,0,0,0,0,0,1,1,1,0,0,1,0,0,0,1,0,0,1,1,1,0,0,0,0,0,0,0,
+    0,0,0,0,0,0,1,1,1,0,1,1,1,0,0,1,0,0,1,1,1,0,0,0,0,0,0,0,
+    0,0,0,0,0,0,0,1,0,0,1,1,1,0,1,1,1,0,0,1,0,0,0,0,0,0,0,0,
+    0,0,0,0,0,0,0,1,0,0,0,1,0,0,1,1,1,0,0,1,0,0,0,0,0,0,0,0,
+    0,0,0,0,0,0,0,1,0,0,0,1,0,0,0,1,0,0,0,1,0,0,0,0,0,0,0,0,
+]
+
+GRAPH_ICON = [
+    1,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,
+    1,0,0,0,0,0,1,1,1,0,0,0,0,0,0,0,0,0,0,0,0,0,1,1,0,0,0,0,
+    1,0,0,0,1,1,0,0,0,1,0,0,1,0,0,0,1,0,0,1,1,1,0,0,1,0,0,0,
+    1,0,1,1,0,0,0,0,0,0,1,1,0,1,1,1,0,1,1,0,0,0,0,0,0,1,1,1,
+    1,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,
+    1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,
+]
+
+SETTINGS_ICON = [
+    0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,
+    0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,
+    0,0,0,0,0,0,0,0,0,0,0,1,0,0,0,0,0,1,0,0,0,0,0,0,0,0,0,0,
+    0,0,0,0,0,0,0,0,0,1,0,0,0,0,0,0,0,0,0,1,0,0,0,0,0,0,0,0,
+    0,0,0,0,0,0,0,0,0,0,1,1,1,1,1,1,1,1,1,0,0,0,0,0,0,0,0,0,
+    0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,
+]
+# fmt: on
+
 
 class Heater:
 
@@ -32,6 +62,13 @@ class Heater:
     relay = None
 
     heater_power = 0
+    active_tab = 0
+
+    # This is set to match graph width
+    n_temp_points = 107
+    temp_data = deque([], n_temp_points)
+    axis_min = 0
+    axis_max = 0
 
     def __init__(self):
         LOGGER.info("Heater starting...")
@@ -68,62 +105,44 @@ class Heater:
             LOGGER.error("LCD128x64 init failed: " + str(error.description))
             return
 
-        self.lcd.set_gui_button(0, 2, 25, 60, 15, "-1%")
-        self.lcd.set_gui_button(1, 64, 25, 60, 15, "+1%")
-        self.lcd.set_gui_button(2, 2, 45, 60, 15, "-10%")
-        self.lcd.set_gui_button(3, 64, 45, 60, 15, "+10%")
+        self.lcd.set_gui_tab_selected_callback_configuration(GUI_READ_PERIOD, True)
+        self.lcd.register_callback(
+            BrickletLCD128x64.CALLBACK_GUI_TAB_SELECTED, self.cb_tab
+        )
+        self.lcd.set_gui_tab_configuration(self.lcd.CHANGE_TAB_ON_CLICK_AND_SWIPE, True)
+        self.lcd.set_gui_tab_icon(0, CONTROL_ICON)
+        self.lcd.set_gui_tab_icon(1, GRAPH_ICON)
+        self.lcd.set_gui_tab_icon(2, SETTINGS_ICON)
+
         self.lcd.set_gui_button_pressed_callback_configuration(GUI_READ_PERIOD, True)
         self.lcd.register_callback(
             BrickletLCD128x64.CALLBACK_GUI_BUTTON_PRESSED, self.cb_button
         )
 
-        self.write_power()
+        # Set initial tab
+        self.cb_tab(self.active_tab)
 
-    def _init_thermocouple(self, uid):
-        try:
-            self.thermocouple = BrickletThermocoupleV2(uid, self.ipcon)
-            LOGGER.info("Thermocouple initialized")
-        except TFConnectionError as error:
-            LOGGER.error("Thermocouple init failed: " + str(error.description))
-            return
+    def cb_tab(self, index):
+        self.active_tab = index
+        self.lcd.clear_display()
+        if index == 0:
+            self.write_temp("-")
+            self.write_power()
+            self.lcd.set_gui_button(0, 2, 22, 61, 14, "-1%")
+            self.lcd.set_gui_button(1, 66, 22, 61, 14, "+1%")
+            self.lcd.set_gui_button(2, 2, 38, 61, 14, "-10%")
+            self.lcd.set_gui_button(3, 66, 38, 61, 14, "+10%")
 
-        self.thermocouple.set_temperature_callback_configuration(
-            THERMOCOUPLE_READ_PERIOD, False, "x", 0, 0
-        )
-        self.thermocouple.register_callback(
-            BrickletThermocoupleV2.CALLBACK_TEMPERATURE, self.cb_thermocouple
-        )
+        elif index == 1:
+            self.lcd.set_gui_graph_configuration(
+                0, BrickletLCD128x64.GRAPH_TYPE_LINE, 20, 0, 107, 52, "", ""
+            )
+            self.update_graph()
+            self.lcd.draw_text(0, 23, BrickletLCD128x64.FONT_6X8, True, "\xDFC")
+            self.update_axis()
 
-    def _init_relay(self, uid):
-        try:
-            self.relay = BrickletSolidStateRelayV2(uid, self.ipcon)
-            LOGGER.info("Relay initialized")
-        except TFConnectionError as error:
-            LOGGER.error("Relay init failed: " + str(error.description))
-            return
-
-        self.relay.register_callback(
-            BrickletSolidStateRelayV2.CALLBACK_MONOFLOP_DONE, self.cb_relay_flop
-        )
-        self.relay.set_monoflop(False, 0)
-
-    def write_temp(self, value):
-        if self.lcd is None:
-            return
-        self.lcd.draw_box(0, 0, 127, 10, True, BrickletLCD128x64.COLOR_WHITE)
-        celcius = int(value) / 100
-        string = f"Temp: {celcius:6.2f}\xDFC"
-        self.lcd.draw_text(0, 0, BrickletLCD128x64.FONT_6X8, True, string)
-
-    def write_power(self):
-        if self.lcd is None:
-            return
-        self.lcd.draw_box(0, 12, 127, 20, True, BrickletLCD128x64.COLOR_WHITE)
-        string = f"Power: {self.heater_power}%"
-        self.lcd.draw_text(0, 12, BrickletLCD128x64.FONT_6X8, True, string)
-
-    def cb_thermocouple(self, value):
-        self.write_temp(value)
+        elif index == 2:
+            self.lcd.draw_text(0, 0, BrickletLCD128x64.FONT_6X8, True, "BV21")
 
     def cb_button(self, index, value):
         if value is False:
@@ -141,6 +160,41 @@ class Heater:
             self.heater_power = min(self.heater_power + 10, 100)
             self.write_power()
 
+    def _init_thermocouple(self, uid):
+        try:
+            self.thermocouple = BrickletThermocoupleV2(uid, self.ipcon)
+            LOGGER.info("Thermocouple initialized")
+        except TFConnectionError as error:
+            LOGGER.error("Thermocouple init failed: " + str(error.description))
+            return
+
+        self.thermocouple.set_temperature_callback_configuration(
+            THERMOCOUPLE_READ_PERIOD, False, "x", 0, 0
+        )
+        self.thermocouple.register_callback(
+            BrickletThermocoupleV2.CALLBACK_TEMPERATURE, self.cb_thermocouple
+        )
+
+    def cb_thermocouple(self, value):
+        celcius = int(value) / 100
+        string = f"Temp: {celcius:6.2f}\xDFC"
+        self.write_temp(string)
+        self.temp_data.append(celcius)
+        self.update_graph()
+
+    def _init_relay(self, uid):
+        try:
+            self.relay = BrickletSolidStateRelayV2(uid, self.ipcon)
+            LOGGER.info("Relay initialized")
+        except TFConnectionError as error:
+            LOGGER.error("Relay init failed: " + str(error.description))
+            return
+
+        self.relay.register_callback(
+            BrickletSolidStateRelayV2.CALLBACK_MONOFLOP_DONE, self.cb_relay_flop
+        )
+        self.relay.set_monoflop(False, 0)
+
     def cb_relay_flop(self, state):
         on_time = round((self.heater_power / 100) * PWM_PERIOD)
         off_time = PWM_PERIOD - on_time
@@ -156,6 +210,61 @@ class Heater:
             self.relay.set_monoflop(True, on_time)
         else:
             self.relay.set_monoflop(False, off_time)
+
+    def write_temp(self, string):
+        if self.lcd is None:
+            return
+        if self.active_tab != 0:
+            return
+        self.lcd.draw_box(0, 0, 127, 10, True, BrickletLCD128x64.COLOR_WHITE)
+        self.lcd.draw_text(0, 0, BrickletLCD128x64.FONT_6X8, True, string)
+
+    def write_power(self):
+        if self.lcd is None:
+            return
+        if self.active_tab != 0:
+            return
+        self.lcd.draw_box(0, 11, 127, 20, True, BrickletLCD128x64.COLOR_WHITE)
+        string = f"Power: {self.heater_power}%"
+        self.lcd.draw_text(0, 11, BrickletLCD128x64.FONT_6X8, True, string)
+
+    def update_axis(self):
+        self.lcd.draw_box(0, 0, 20, 10, True, BrickletLCD128x64.COLOR_WHITE)
+        self.lcd.draw_box(0, 45, 20, 55, True, BrickletLCD128x64.COLOR_WHITE)
+        self.lcd.draw_text(
+            0, 0, BrickletLCD128x64.FONT_6X8, True, f"{self.axis_max:3.0f}"
+        )
+        self.lcd.draw_text(
+            0, 45, BrickletLCD128x64.FONT_6X8, True, f"{self.axis_min:3.0f}"
+        )
+        self.lcd.draw_text(0, 107, BrickletLCD128x64.FONT_6X8, True, f"")
+
+    def update_graph(self):
+        if self.lcd is None:
+            return
+        if self.active_tab != 1:
+            return
+
+        max_temp = round(max(self.temp_data))
+        min_temp = round(min(self.temp_data))
+
+        # Pad a little bit for looks
+        max_temp *= 1.1
+        min_temp *= 0.9
+
+        diff = max_temp - min_temp
+        scaled_data = [((value - min_temp) / diff) * 255 for value in self.temp_data]
+
+        # This gets rid of any randomness which apparently sometimes occurs when
+        # the thermocouple bricklet is physically bumped.
+        scaled_data = map(lambda value: max(min(value, 255), 0), scaled_data)
+
+        if max_temp != self.axis_max or min_temp != self.axis_min:
+            self.axis_max = max_temp
+            self.axis_min = min_temp
+            self.update_axis()
+
+        self.lcd.set_gui_graph_data(0, scaled_data)
 
     def cb_enumerate(self, uid, _, __, ___, ____, device_identifier, enumeration_type):
         if (

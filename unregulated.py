@@ -1,3 +1,5 @@
+#!/usr/bin/env python3
+
 from logging import getLogger, INFO, StreamHandler
 from time import sleep
 

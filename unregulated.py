@@ -6,6 +6,7 @@ import socket
 from collections import deque
 from logging import getLogger, INFO, StreamHandler
 from time import sleep
+from subprocess import run
 
 from tinkerforge.ip_connection import IPConnection
 from tinkerforge.ip_connection import Error as TFConnectionError
@@ -143,6 +144,7 @@ class Heater:
 
         elif index == 2:
             self.lcd.draw_text(0, 0, BrickletLCD128x64.FONT_6X8, True, "BV21")
+            self.lcd.set_gui_button(4, 0, 10, 80, 20, "Shut Down")
 
     def cb_button(self, index, value):
         if value is False:
@@ -159,6 +161,9 @@ class Heater:
         elif index == 3:
             self.heater_power = min(self.heater_power + 10, 100)
             self.write_power()
+        elif index == 4:
+            self.close()
+            self.shutdown_host()
 
     def _init_thermocouple(self, uid):
         try:
@@ -299,6 +304,9 @@ class Heater:
         if self.ipcon is not None:
             self.ipcon.disconnect()
         LOGGER.info("Heater shut down")
+
+    def shutdown_host(self):
+        run("sudo shutdown now", shell=True)
 
 
 if __name__ == "__main__":

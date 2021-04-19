@@ -57,6 +57,8 @@ SETTINGS_ICON = [
 
 class Heater:
 
+    # These are the bricklet objects which are populated
+    # as the hardware responds to enumeration request.
     ipcon = None
     lcd = None
     thermocouple = None
@@ -73,7 +75,7 @@ class Heater:
 
     # This is set to match graph width
     n_temp_points = 107
-    temp_data = deque([], n_temp_points)
+    temp_data = deque([0], n_temp_points)
     axis_min = 0
     axis_max = 0
 
@@ -277,6 +279,10 @@ class Heater:
         min_temp *= 0.9
 
         diff = max_temp - min_temp
+        if diff == 0:
+            # This probably means we don't have any data yet
+            return
+
         scaled_data = [((value - min_temp) / diff) * 255 for value in self.temp_data]
 
         # This gets rid of any randomness which apparently sometimes occurs when

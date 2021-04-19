@@ -62,7 +62,13 @@ class Heater:
     thermocouple = None
     relay = None
 
+    # PWM power for output. 0 - 100
     heater_power = 0
+
+    # Current state of output. Boolean
+    heater_active = False
+
+    # Current active GUI tab index
     active_tab = 0
 
     # This is set to match graph width
@@ -146,21 +152,37 @@ class Heater:
             self.lcd.draw_text(0, 0, BrickletLCD128x64.FONT_6X8, True, "BV21")
             self.lcd.set_gui_button(4, 0, 10, 80, 20, "Shut Down")
 
+    def _cb_power_button(self, power):
+        old_power = self.heater_power
+        sticky_state_active = old_power == 100 or old_power == 0
+        self.heater_power = power
+
+        if power == 100:
+            self.relay.set_state(True)
+            self.heater_active = True
+        elif power == 0:
+            self.relay.set_state(False)
+            self.heater_active = False
+        elif 0 < power < 100 and sticky_state_active:
+            # If we're coming out of a sticky state, kick of the
+            # flop loop for PWM.
+            self.relay.set_state(False)
+            self.heater_active = False
+            self.relay.set_monoflop(False, 0)
+
+        self.write_power()
+
     def cb_button(self, index, value):
         if value is False:
             return
         if index == 0:
-            self.heater_power = max(self.heater_power - 1, 0)
-            self.write_power()
+            self._cb_power_button(max(self.heater_power - 1, 0))
         elif index == 1:
-            self.heater_power = min(self.heater_power + 1, 100)
-            self.write_power()
+            self._cb_power_button(min(self.heater_power + 1, 100))
         elif index == 2:
-            self.heater_power = max(self.heater_power - 10, 0)
-            self.write_power()
+            self._cb_power_button(max(self.heater_power - 10, 0))
         elif index == 3:
-            self.heater_power = min(self.heater_power + 10, 100)
-            self.write_power()
+            self._cb_power_button(min(self.heater_power + 10, 100))
         elif index == 4:
             self.close()
             self.shutdown_host()
@@ -198,23 +220,20 @@ class Heater:
         self.relay.register_callback(
             BrickletSolidStateRelayV2.CALLBACK_MONOFLOP_DONE, self.cb_relay_flop
         )
-        self.relay.set_monoflop(False, 0)
+        self.relay.set_state(False)
 
-    def cb_relay_flop(self, state):
+    def cb_relay_flop(self, _):
         on_time = round((self.heater_power / 100) * PWM_PERIOD)
         off_time = PWM_PERIOD - on_time
 
-        # I don't understand why this is. The docs say the value here
-        # should be the state *after* the monoflop, but it seems to
-        # just return the opposite of the state we flopped to.
-        # eg. Flopping to False from False will return True here,
-        # where by the docs you'd expect False.
-        previous_state = not state
-
-        if on_time and previous_state is False:
-            self.relay.set_monoflop(True, on_time)
-        else:
-            self.relay.set_monoflop(False, off_time)
+        if self.heater_power < 100:
+            if self.heater_active:
+                self.relay.set_monoflop(False, off_time)
+                self.heater_active = False
+            else:
+                self.relay.set_monoflop(True, on_time)
+                self.heater_active = True
+        # If power is 0 or 100, we're not using the flop loop
 
     def write_temp(self, string):
         if self.lcd is None:

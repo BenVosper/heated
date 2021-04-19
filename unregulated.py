@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-
+import asyncio
 import atexit
 import socket
 
@@ -339,5 +339,8 @@ if __name__ == "__main__":
     heater = Heater()
     atexit.register(heater.close)
 
-    while True:
-        sleep(600)
+    loop = asyncio.get_event_loop()
+    try:
+        loop.run_forever()
+    finally:
+        loop.close()

@@ -135,7 +135,7 @@ class Heater:
         self.active_tab = index
         self.lcd.clear_display()
         if index == 0:
-            self.write_temp("-")
+            self.write_temp()
             self.write_power()
             self.lcd.set_gui_button(0, 2, 22, 61, 14, "-1%")
             self.lcd.set_gui_button(1, 66, 22, 61, 14, "+1%")
@@ -206,9 +206,8 @@ class Heater:
 
     def cb_thermocouple(self, value):
         celcius = int(value) / 100
-        string = f"Temp: {celcius:6.2f}\xDFC"
-        self.write_temp(string)
         self.temp_data.append(celcius)
+        self.write_temp()
         self.update_graph()
 
     def _init_relay(self, uid):
@@ -237,13 +236,15 @@ class Heater:
                 self.heater_active = True
         # If power is 0 or 100, we're not using the flop loop
 
-    def write_temp(self, string):
+    def write_temp(self):
         if self.lcd is None:
             return
         if self.active_tab != 0:
             return
+        current_temp = self.temp_data[-1]
+        temp_string = f"Temp: {current_temp:6.2f}\xDFC"
         self.lcd.draw_box(0, 0, 127, 10, True, BrickletLCD128x64.COLOR_WHITE)
-        self.lcd.draw_text(0, 0, BrickletLCD128x64.FONT_6X8, True, string)
+        self.lcd.draw_text(0, 0, BrickletLCD128x64.FONT_6X8, True, temp_string)
 
     def write_power(self):
         if self.lcd is None:

@@ -249,8 +249,6 @@ class Heater:
         # TODO: Implement float power values for more precision
         power = round(self.pid(celcius))
 
-        LOGGER.info((celcius, power))
-
         old_power = self.heater_power
         sticky_state_active = old_power == 100 or old_power == 0
         self.heater_power = power

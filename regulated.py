@@ -139,6 +139,9 @@ class Heater:
         self.pid.proportional_on_measurement = tuning_dict.get(
             "proportional_on_measurement", False
         )
+        LOGGER.info(
+            f"Set tunings: {self.pid.tunings}, PoM: {self.pid.proportional_on_measurement}"
+        )
 
     def _init_lcd(self, uid):
         try:

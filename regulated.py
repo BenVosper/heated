@@ -249,8 +249,7 @@ class Heater:
         if self.tuning_mode:
             self._set_pid_tuning()
 
-        # TODO: Implement float power values for more precision
-        power = round(self.pid(celcius))
+        power = self.pid(celcius)
 
         old_power = self.heater_power
         sticky_state_active = old_power == 100 or old_power == 0
@@ -312,7 +311,7 @@ class Heater:
         if self.active_tab != 0:
             return
         self.lcd.draw_box(0, 10, 127, 19, True, BrickletLCD128x64.COLOR_WHITE)
-        string = f"Power: {self.heater_power}%"
+        string = f"Power: {self.heater_power:3.1f}%"
         self.lcd.draw_text(0, 10, BrickletLCD128x64.FONT_6X8, True, string)
 
     def write_setpoint(self):

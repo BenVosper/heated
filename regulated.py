@@ -389,8 +389,8 @@ class Heater:
         if self.active_tab != 1:
             return
 
-        max_temp = round(max(self.temp_data))
-        min_temp = round(min(self.temp_data))
+        max_temp = max(self.temp_data)
+        min_temp = min(self.temp_data)
 
         # Pad a little bit for looks
         max_temp *= 1.1

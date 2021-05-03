@@ -5,7 +5,8 @@ import json
 import socket
 
 from collections import deque
-from logging import getLogger, INFO, StreamHandler
+from datetime import datetime
+from logging import getLogger, INFO, StreamHandler, FileHandler
 from time import sleep
 from subprocess import run
 from os import path
@@ -20,7 +21,10 @@ from tinkerforge.bricklet_solid_state_relay_v2 import BrickletSolidStateRelayV2
 
 LOGGER = getLogger(__name__)
 LOGGER.setLevel(INFO)
-LOGGER.addHandler(StreamHandler())
+STDOUT_HANDLER = StreamHandler()
+LOGGER.addHandler(STDOUT_HANDLER)
+
+DATETIME_FMT = "%d-%m-%y_%H-%M-%S"
 
 PID_TUNING_FILE_PATH = "tuning.json"
 
@@ -92,6 +96,9 @@ class Heater:
     # Set true to read tuning parameters every iteration
     tuning_mode = False
 
+    # Set true to log data to a file
+    logging_mode = False
+
     def __init__(self):
         LOGGER.info("Heater starting...")
 
@@ -111,6 +118,16 @@ class Heater:
 
         self.ipcon.register_callback(IPConnection.CALLBACK_ENUMERATE, self.cb_enumerate)
         self.ipcon.register_callback(IPConnection.CALLBACK_CONNECTED, self.cb_connected)
+
+        if self.logging_mode:
+            logfile_path = f"{datetime.now().strftime(DATETIME_FMT)}_heated_data.csv"
+            self.data_logger = getLogger("data-logger")
+            self.data_logger.setLevel(INFO)
+            self.data_logger.addHandler(FileHandler(logfile_path))
+            self.data_logger.addHandler(STDOUT_HANDLER)
+            self.data_logger.info(
+                f"Timestamp, Temp (°C), Setpoint (°C), Power (%), Kp, Ki, Kd, Cp, Ci, Cd"
+            )
 
         while True:
             try:
@@ -231,7 +248,7 @@ class Heater:
         self.thermocouple.set_configuration(
             BrickletThermocoupleV2.AVERAGING_16,
             BrickletThermocoupleV2.TYPE_K,
-            BrickletThermocoupleV2.FILTER_OPTION_60HZ
+            BrickletThermocoupleV2.FILTER_OPTION_60HZ,
         )
         self.thermocouple.set_temperature_callback_configuration(
             THERMOCOUPLE_READ_PERIOD, False, "x", 0, 0
@@ -278,6 +295,27 @@ class Heater:
             self.relay.set_state(False)
             self.heater_active = False
             self.relay.set_monoflop(False, 0)
+
+        if self.logging_mode:
+            timestamp = datetime.now().strftime(DATETIME_FMT)
+            kp, ki, kd = self.pid.tunings
+            cp, ci, cd = self.pid.components
+            log_line = ", ".join(
+                str(value)
+                for value in (
+                    timestamp,
+                    current_temp,
+                    self.setpoint,
+                    self.heater_power,
+                    kp,
+                    ki,
+                    kd,
+                    cp,
+                    ci,
+                    cd,
+                )
+            )
+            self.data_logger.info(log_line)
 
     def _init_relay(self, uid):
         try:

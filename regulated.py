@@ -269,10 +269,6 @@ class Heater:
         if (error < 0 < previous_error) or (error > 0 > previous_error):
             self.pid._integral = 0
 
-        self.temp_data.append(current_temp)
-        self.write_temp()
-        self.update_graph()
-
         if self.tuning_mode:
             self._set_pid_tuning()
 
@@ -295,6 +291,10 @@ class Heater:
             self.relay.set_state(False)
             self.heater_active = False
             self.relay.set_monoflop(False, 0)
+
+        self.temp_data.append(current_temp)
+        self.write_temp()
+        self.update_graph()
 
         if self.logging_mode:
             timestamp = datetime.now().strftime(DATETIME_FMT)

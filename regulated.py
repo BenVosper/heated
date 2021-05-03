@@ -241,15 +241,25 @@ class Heater:
         )
 
     def cb_thermocouple(self, value):
-        celcius = int(value) / 100
-        self.temp_data.append(celcius)
+        current_temp = int(value) / 100
+        previous_temp = self.temp_data[-1]
+
+        error = self.setpoint - current_temp
+        previous_error = self.setpoint - previous_temp
+
+        # On zero-crossing, remove any accumulated error. If we're over-temp,
+        # we don't want to wait for all of this error to balance itself out.
+        if (error < 0 < previous_error) or (error > 0 > previous_error):
+            self.pid._integral = 0
+
+        self.temp_data.append(current_temp)
         self.write_temp()
         self.update_graph()
 
         if self.tuning_mode:
             self._set_pid_tuning()
 
-        power = self.pid(celcius)
+        power = self.pid(current_temp)
 
         old_power = self.heater_power
         sticky_state_active = old_power == 100 or old_power == 0

@@ -84,12 +84,16 @@ class Heater:
     # Current state of output. Boolean
     heater_active = False
 
+    # Current state of thermocouple.
+    # False if bricklet reports an error state.
+    thermocouple_active = True
+
     # Current active GUI tab index
     active_tab = 0
 
     # This is set to match graph width
     n_temp_points = 107
-    temp_data = deque([0], n_temp_points)
+    temp_data = deque([0.0], n_temp_points)
     axis_min = 0
     axis_max = 0
 
@@ -254,12 +258,26 @@ class Heater:
             THERMOCOUPLE_READ_PERIOD, False, "x", 0, 0
         )
         self.thermocouple.register_callback(
-            BrickletThermocoupleV2.CALLBACK_TEMPERATURE, self.cb_thermocouple
+            BrickletThermocoupleV2.CALLBACK_ERROR_STATE, self.cb_thermocouple_error
+        )
+        self.thermocouple.register_callback(
+            BrickletThermocoupleV2.CALLBACK_TEMPERATURE, self.cb_thermocouple_reading
         )
 
-    def cb_thermocouple(self, value):
-        current_temp = int(value) / 100
-        previous_temp = self.temp_data[-1]
+    def cb_thermocouple_error(self, over_under, open_circuit):
+        if any((over_under, open_circuit)):
+            self.thermocouple_active = False
+        else:
+            self.thermocouple_active = True
+
+        LOGGER.info(
+            f"Thermocouple reports: "
+            f"over/under voltage {over_under}, open-circuit {open_circuit}"
+        )
+
+    def get_pid_value(self):
+        current_temp = self.temp_data[-1]
+        previous_temp = self.temp_data[-2]
 
         error = self.setpoint - current_temp
         previous_error = self.setpoint - previous_temp
@@ -272,12 +290,20 @@ class Heater:
         if self.tuning_mode:
             self._set_pid_tuning()
 
-        power = self.pid(current_temp)
+        return self.pid(current_temp)
+
+    def cb_thermocouple_reading(self, value):
+        if self.thermocouple_active:
+            current_temp = value / 100
+            self.temp_data.append(current_temp)
+            power = self.get_pid_value()
+        else:
+            power = 0
+            LOGGER.info("Thermocouple in error state. Output deactivated.")
 
         old_power = self.heater_power
         sticky_state_active = old_power == 100 or old_power == 0
         self.heater_power = power
-        self.write_power()
 
         if power == 100:
             self.relay.set_state(True)
@@ -292,30 +318,34 @@ class Heater:
             self.heater_active = False
             self.relay.set_monoflop(False, 0)
 
-        self.temp_data.append(current_temp)
         self.write_temp()
+        self.write_power()
         self.update_graph()
 
         if self.logging_mode:
-            timestamp = datetime.now().strftime(DATETIME_FMT)
-            kp, ki, kd = self.pid.tunings
-            cp, ci, cd = self.pid.components
-            log_line = ", ".join(
-                str(value)
-                for value in (
-                    timestamp,
-                    current_temp,
-                    self.setpoint,
-                    self.heater_power,
-                    kp,
-                    ki,
-                    kd,
-                    cp,
-                    ci,
-                    cd,
-                )
+            self.log_line()
+
+    def log_line(self):
+        timestamp = datetime.now().strftime(DATETIME_FMT)
+        current_temp = self.temp_data[-1]
+        kp, ki, kd = self.pid.tunings
+        cp, ci, cd = self.pid.components
+        log_line = ", ".join(
+            str(value)
+            for value in (
+                timestamp,
+                current_temp,
+                self.setpoint,
+                self.heater_power,
+                kp,
+                ki,
+                kd,
+                cp,
+                ci,
+                cd,
             )
-            self.data_logger.info(log_line)
+        )
+        self.data_logger.info(log_line)
 
     def _init_relay(self, uid):
         try:
@@ -349,7 +379,9 @@ class Heater:
         if self.active_tab != 0:
             return
         current_temp = self.temp_data[-1]
-        temp_string = f"T: {current_temp:2.0f}\xDFC"
+        temp_string = (
+            f"T: {current_temp:2.0f}\xDFC" if self.thermocouple_active else "T: ERR!"
+        )
         self.lcd.draw_box(0, 0, 59, 10, True, BrickletLCD128x64.COLOR_WHITE)
         self.lcd.draw_text(0, 0, BrickletLCD128x64.FONT_6X8, True, temp_string)
 

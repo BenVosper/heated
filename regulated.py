@@ -115,6 +115,9 @@ class Heater:
     # Set true to log data to a file
     logging_mode = False
 
+    # Current target tunings
+    tunings = {"p": 0, "i": 0, "d": 0, "proportional_on_measurement": False}
+
     def __init__(self):
         LOGGER.info("Heater starting...")
 
@@ -155,9 +158,10 @@ class Heater:
 
     def _init_pid(self):
         self.pid = PID(setpoint=self.setpoint, output_limits=(0, 100))
-        self._set_pid_tuning()
+        self._read_pid_tunings_from_file()
+        self._set_pid_tuning(self.tunings)
 
-    def _set_pid_tuning(self):
+    def _read_pid_tunings_from_file(self):
         if not path.exists(PID_TUNING_FILE_PATH):
             LOGGER.info(
                 f"{PID_TUNING_FILE_PATH} does not exist. Using default tunings."
@@ -165,8 +169,9 @@ class Heater:
             return
 
         with open(PID_TUNING_FILE_PATH, "r") as f:
-            tuning_dict = json.load(f)
+            self.tunings = json.load(f)
 
+    def _set_pid_tuning(self, tuning_dict):
         tunings = (tuning_dict.get(parameter, 0) for parameter in ("p", "i", "d"))
         self.pid.tunings = tunings
         self.pid.proportional_on_measurement = tuning_dict.get(
@@ -303,7 +308,8 @@ class Heater:
             self.pid._integral = 0
 
         if self.tuning_mode:
-            self._set_pid_tuning()
+            self._read_pid_tunings_from_file()
+            self._set_pid_tuning(self.tunings)
 
         return self.pid(current_temp)
 

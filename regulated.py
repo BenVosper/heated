@@ -118,6 +118,9 @@ class Heater:
     # Current target tunings
     tunings = {"p": 0, "i": 0, "d": 0, "proportional_on_measurement": False}
 
+    # Only apply integral correction when error is between:
+    integral_threshold = (-10, 0)
+
     def __init__(self):
         LOGGER.info("Heater starting...")
 
@@ -176,9 +179,6 @@ class Heater:
         self.pid.tunings = tunings
         self.pid.proportional_on_measurement = tuning_dict.get(
             "proportional_on_measurement", False
-        )
-        LOGGER.info(
-            f"Set tunings: {self.pid.tunings}, PoM: {self.pid.proportional_on_measurement}"
         )
 
     def _init_lcd(self, uid):
@@ -299,8 +299,8 @@ class Heater:
             sum(last_temps[-(N_SMOOTHING_POINTS + 1) : -1]) / N_SMOOTHING_POINTS
         )
 
-        error = self.setpoint - current_temp
-        previous_error = self.setpoint - previous_temp
+        error = current_temp - self.setpoint
+        previous_error = previous_temp - self.setpoint
 
         # On zero-crossing, remove any accumulated error. If we're over-temp,
         # we don't want to wait for all of this error to balance itself out.
@@ -309,7 +309,14 @@ class Heater:
 
         if self.tuning_mode:
             self._read_pid_tunings_from_file()
-            self._set_pid_tuning(self.tunings)
+
+        self._set_pid_tuning(self.tunings)
+
+        # Disable integral correction if we're not in the threshold
+        integral_threshold_min, integral_threshold_max = self.integral_threshold
+        if not (integral_threshold_min <= error <= integral_threshold_max):
+            outside_threshold_tunings = {**self.tunings, "i": 0}
+            self._set_pid_tuning(outside_threshold_tunings)
 
         return self.pid(current_temp)
 

@@ -19,6 +19,12 @@ from tinkerforge.bricklet_lcd_128x64 import BrickletLCD128x64
 from tinkerforge.bricklet_thermocouple_v2 import BrickletThermocoupleV2
 from tinkerforge.bricklet_solid_state_relay_v2 import BrickletSolidStateRelayV2
 
+
+def last_n_values(n, iterable):
+    for i in range(n, 0, -1):
+        yield iterable[-i]
+
+
 LOGGER = getLogger(__name__)
 LOGGER.setLevel(INFO)
 STDOUT_HANDLER = StreamHandler()
@@ -34,6 +40,7 @@ PORT = 4223
 THERMOCOUPLE_READ_PERIOD = 2500
 GUI_READ_PERIOD = 100
 PWM_PERIOD = 1000
+N_SMOOTHING_POINTS = 5
 
 # fmt: off
 CONTROL_ICON = [
@@ -91,11 +98,16 @@ class Heater:
     # Current active GUI tab index
     active_tab = 0
 
-    # This is set to match graph width
+    # Number of readings to keep in state. This is set to match graph width
     n_temp_points = 107
-    temp_data = deque([0.0], n_temp_points)
-    axis_min = 0
-    axis_max = 0
+
+    starting_temp = 20
+    initial_temp_data = [starting_temp] * N_SMOOTHING_POINTS
+    temp_data = deque(initial_temp_data, n_temp_points)
+
+    # Min and max for graph Y axis. Updated automatically with data
+    axis_min = starting_temp - 10
+    axis_max = starting_temp + 10
 
     # Set true to read tuning parameters every iteration
     tuning_mode = False
@@ -276,8 +288,11 @@ class Heater:
         )
 
     def get_pid_value(self):
-        current_temp = self.temp_data[-1]
-        previous_temp = self.temp_data[-2]
+        last_temps = [*last_n_values(N_SMOOTHING_POINTS + 1, self.temp_data)]
+        current_temp = sum(last_temps[-N_SMOOTHING_POINTS:]) / N_SMOOTHING_POINTS
+        previous_temp = (
+            sum(last_temps[-(N_SMOOTHING_POINTS + 1) : -1]) / N_SMOOTHING_POINTS
+        )
 
         error = self.setpoint - current_temp
         previous_error = self.setpoint - previous_temp

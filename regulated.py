@@ -304,7 +304,7 @@ class Heater:
 
         # On zero-crossing, remove any accumulated error. If we're over-temp,
         # we don't want to wait for all of this error to balance itself out.
-        if (error < 0 < previous_error) or (error > 0 > previous_error):
+        if (error * previous_error) <= 0:
             self.pid._integral = 0
 
         if self.tuning_mode:

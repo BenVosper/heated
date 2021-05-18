@@ -30,7 +30,7 @@ LOGGER.setLevel(INFO)
 STDOUT_HANDLER = StreamHandler()
 LOGGER.addHandler(STDOUT_HANDLER)
 
-DATETIME_FMT = "%d-%m-%y_%H-%M-%S"
+DATETIME_FMT = "%d/%m/%Y %H:%M:%S"
 
 PID_TUNING_FILE_PATH = "tuning.json"
 
@@ -142,7 +142,7 @@ class Heater:
         self.ipcon.register_callback(IPConnection.CALLBACK_CONNECTED, self.cb_connected)
 
         if self.logging_mode:
-            logfile_path = f"{datetime.now().strftime(DATETIME_FMT)}_heated_data.csv"
+            logfile_path = f"{datetime.now().timestamp():0f}_heated_data.csv"
             self.data_logger = getLogger("data-logger")
             self.data_logger.setLevel(INFO)
             self.data_logger.addHandler(FileHandler(logfile_path))

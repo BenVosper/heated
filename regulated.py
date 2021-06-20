@@ -116,7 +116,7 @@ class Heater:
     logging_mode = False
 
     # Current target tunings
-    tunings = {"p": 0, "i": 0, "d": 0, "proportional_on_measurement": False}
+    tunings = {"p": 0, "i": 0, "d": 0, "bias": 0, "proportional_on_measurement": False}
 
     def __init__(self):
         LOGGER.info("Heater starting...")
@@ -177,6 +177,7 @@ class Heater:
         self.pid.proportional_on_measurement = tuning_dict.get(
             "proportional_on_measurement", False
         )
+        self.pid.bias = tuning_dict.get("bias", 0)
 
     def _init_lcd(self, uid):
         try:

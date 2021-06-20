@@ -2,5 +2,6 @@
   "p": 1,
   "i": 0,
   "d": 0,
+  "bias": 0,
   "proportional_on_measurement": false
 }

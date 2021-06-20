@@ -1,2 +1,2 @@
 tinkerforge==2.1.28
-simple-pid==1.0.1
+git+https://github.com/BenVosper/simple-pid.git@feature/bias

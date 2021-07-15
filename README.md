@@ -41,7 +41,16 @@ values in between, we use PWM with a fixed frequency (1Hz by default).
 Provides a GUI which allows a desired target temperature to be set. A PID loop then dynamically
 updates heater power according to thermocouple temperature and tuning parameters.
 
+![controls-tab](assets/controls.jpg)
+
+*The controls tab. Use the buttons to modify the set temperature (S)*
+
 Thermocouple temperature can again be visualised via a graph to verify stability.
+
+![graph-tab](assets/graph.jpg)
+
+*The graph tab. Each horizontal pixel is one thermocouple reading. As such, the time scale is 
+determined by the read period (default: 1 second per pixel)*
 
 PID parameters are set via the separate `tuning.json` file which is read on initialisation.
 If `Heater.tuning_mode` is set to `True`, this file is read on every PID iteration. This is

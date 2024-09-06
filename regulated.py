@@ -92,8 +92,7 @@ class Heater:
     heater_active = False
 
     # Current state of thermocouple.
-    # False if bricklet reports an error state.
-    thermocouple_active = True
+    thermocouple_in_error_state = False
 
     # Current active GUI tab index
     active_tab = 0
@@ -281,9 +280,9 @@ class Heater:
 
     def cb_thermocouple_error(self, over_under, open_circuit):
         if any((over_under, open_circuit)):
-            self.thermocouple_active = False
+            self.thermocouple_in_error_state = True
         else:
-            self.thermocouple_active = True
+            self.thermocouple_in_error_state = False
 
         LOGGER.info(
             f"Thermocouple reports: "
@@ -302,13 +301,13 @@ class Heater:
         return self.pid(current_temp)
 
     def cb_thermocouple_reading(self, value):
-        if self.thermocouple_active:
+        if self.thermocouple_in_error_state:
+            power = 0
+            LOGGER.info("Thermocouple in error state. Output deactivated.")
+        else:
             current_temp = value / 100
             self.temp_data.append(current_temp)
             power = self.get_pid_value()
-        else:
-            power = 0
-            LOGGER.info("Thermocouple in error state. Output deactivated.")
 
         old_power = self.heater_power
         sticky_state_active = old_power == 100 or old_power == 0
@@ -389,7 +388,9 @@ class Heater:
             return
         current_temp = self.temp_data[-1]
         temp_string = (
-            f"T: {current_temp:2.0f}\xDFC" if self.thermocouple_active else "T: ERR!"
+            f"T: {current_temp:2.0f}\xDFC"
+            if not self.thermocouple_in_error_state
+            else "T: ERR!"
         )
         self.lcd.draw_box(0, 0, 59, 10, True, BrickletLCD128x64.COLOR_WHITE)
         self.lcd.draw_text(0, 0, BrickletLCD128x64.FONT_6X8, True, temp_string)

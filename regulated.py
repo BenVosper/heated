@@ -5,7 +5,7 @@ import json
 import socket
 
 from collections import deque
-from datetime import datetime
+from datetime import datetime, timedelta
 from logging import getLogger, INFO, StreamHandler, FileHandler
 from time import sleep
 from subprocess import run
@@ -41,6 +41,11 @@ THERMOCOUPLE_READ_PERIOD = 1000
 GUI_READ_PERIOD = 100
 PWM_PERIOD = 1000
 N_SMOOTHING_POINTS = 5
+
+# If thermocouple is in error state for more than this long,
+# deactivate output until it comes back online.
+DEACTIVATE_POWER_DELAY = timedelta(seconds=11)
+
 
 # fmt: off
 CONTROL_ICON = [
@@ -93,6 +98,7 @@ class Heater:
 
     # Current state of thermocouple.
     thermocouple_in_error_state = False
+    error_state_start = None
 
     # Current active GUI tab index
     active_tab = 0
@@ -280,9 +286,9 @@ class Heater:
 
     def cb_thermocouple_error(self, over_under, open_circuit):
         if any((over_under, open_circuit)):
-            self.thermocouple_in_error_state = True
+            self.error_state_start = datetime.now()
         else:
-            self.thermocouple_in_error_state = False
+            self.error_state_start = None
 
         LOGGER.info(
             f"Thermocouple reports: "
@@ -301,6 +307,14 @@ class Heater:
         return self.pid(current_temp)
 
     def cb_thermocouple_reading(self, value):
+        if (
+            self.error_state_start
+            and (datetime.now() - self.error_state_start) > DEACTIVATE_POWER_DELAY
+        ):
+            self.thermocouple_in_error_state = True
+        else:
+            self.thermocouple_in_error_state = False
+
         if self.thermocouple_in_error_state:
             power = 0
             LOGGER.info("Thermocouple in error state. Output deactivated.")

@@ -283,6 +283,9 @@ class Heater:
         self.thermocouple.register_callback(
             BrickletThermocoupleV2.CALLBACK_TEMPERATURE, self.cb_thermocouple_reading
         )
+        over_under, open_circuit = self.thermocouple.get_error_state()
+        if any((over_under, open_circuit)):
+            self.thermocouple_in_error_state = True
 
     def cb_thermocouple_error(self, over_under, open_circuit):
         if any((over_under, open_circuit)):

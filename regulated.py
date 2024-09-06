@@ -267,7 +267,7 @@ class Heater:
         self.thermocouple.set_configuration(
             BrickletThermocoupleV2.AVERAGING_16,
             BrickletThermocoupleV2.TYPE_K,
-            BrickletThermocoupleV2.FILTER_OPTION_60HZ,
+            BrickletThermocoupleV2.FILTER_OPTION_50HZ,
         )
         self.thermocouple.set_temperature_callback_configuration(
             THERMOCOUPLE_READ_PERIOD, False, "x", 0, 0

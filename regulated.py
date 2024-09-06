@@ -320,7 +320,7 @@ class Heater:
             self.relay.set_state(False)
             self.heater_active = False
         elif 0 < power < 100 and sticky_state_active:
-            # If we're coming out of a sticky state, kick of the
+            # If we're coming out of a sticky state, kick off the
             # flop loop for PWM.
             self.relay.set_state(False)
             self.heater_active = False
